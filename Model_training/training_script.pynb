@@ -1,0 +1,52 @@
+import pandas as pd
+import numpy as np
+import pickle
+from sklearn.preprocessing import MinMaxScaler
+
+# Load the trained models
+with open("xgb_temp.pkl", "rb") as f:
+    xgb_temp = pickle.load(f)
+
+with open("xgb_humid.pkl", "rb") as f:
+    xgb_humid = pickle.load(f)
+
+df = pd.read_csv("your_new_data.csv") 
+
+df['date'] = pd.to_datetime(df['date'])
+
+temp_feature = 'apparent_temperature'
+humid_feature = 'dew_point_2m'
+
+scaler_temp = MinMaxScaler()
+scaler_humid = MinMaxScaler()
+
+df['temp_scaled'] = scaler_temp.fit_transform(df[[temp_feature]])
+df['humid_scaled'] = scaler_humid.fit_transform(df[[humid_feature]])
+
+# Function to create sequences for hourly prediction
+def create_sequences(data, seq_length):
+    X = []
+    for i in range(len(data) - seq_length):
+        X.append(data[i:i + seq_length])
+    return np.array(X)
+
+seq_length = 24  # Use the last 24 hours to predict the next hour
+
+X_temp = create_sequences(df['temp_scaled'].values, seq_length)
+X_humid = create_sequences(df['humid_scaled'].values, seq_length)
+
+y_pred_temp = xgb_temp.predict(X_temp)
+y_pred_humid = xgb_humid.predict(X_humid)
+
+y_pred_temp_actual = scaler_temp.inverse_transform(y_pred_temp.reshape(-1, 1))
+y_pred_humid_actual = scaler_humid.inverse_transform(y_pred_humid.reshape(-1, 1))
+
+results = pd.DataFrame({
+    "Date": df['date'][seq_length:], 
+    "Predicted Temperature": y_pred_temp_actual.flatten(),
+    "Predicted Humidity": y_pred_humid_actual.flatten(),
+})
+
+results.to_csv("predicted_results.csv", index=False)
+
+print("Predictions saved to predicted_results.csv!") 
