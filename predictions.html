@@ -1,0 +1,278 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Prediction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+        .minimal-chart {
+            background-color: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
+                    <i class="fas fa-cloud text-white"></i>
+                </div>
+                <h1 class="text-xl font-semibold">Weather Prediction</h1>
+            </div>
+            <nav class="space-x-4">
+                <a href="index.html" class="text-gray-600 hover:text-gray-800">Dashboard</a>
+                <a href="analytics.html" class="text-gray-600 hover:text-gray-800">Analytics</a>
+                <a href="predictions.html" class="text-gray-900 font-semibold">Predictions</a>
+            </nav>
+        </div>
+    </header>
+    <main class="container mx-auto px-4 py-8">
+        <section class="mb-8">
+            <div class="flex items-center space-x-2 mb-4">
+                <span class="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-sm">March 12-13, 2025 (8AM-12PM)</span>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Weather Forecast Comparison</h2>
+            <p class="text-gray-600 mb-6">Morning forecast analysis (8AM to 12PM)</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div class="minimal-chart">
+                    <div class="chart-container">
+                        <canvas id="tempChart"></canvas>
+                    </div>
+                </div>
+                <div class="minimal-chart">
+                    <div class="chart-container">
+                        <canvas id="humidChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-xl font-semibold mb-4">Complete Dataset (March 12-13)</h3>
+            <div class="bg-white shadow-sm rounded-lg overflow-hidden mb-8 border border-gray-200">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Date & Time</th>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Predicted Temp (°C)</th>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Actual Temp (°C)</th>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Temp Diff</th>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Predicted Humid (%)</th>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Actual Humid (%)</th>
+                                <th class="py-2 px-4 text-left text-sm font-medium text-gray-700">Humid Diff</th>
+                            </tr>
+                        </thead>
+                        <tbody id="data-table" class="divide-y divide-gray-200 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Load and process CSV data
+        function loadCSVData() {
+            Papa.parse("./predicted_vs_actual.csv", {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    const allData = results.data;
+                    
+                    const tableData = allData.filter(row => {
+                        const date = new Date(row.Date);
+                        return (date >= new Date('2025-03-12') && date < new Date('2025-03-14'));
+                    }).map(processRow);
+
+                    const chartData = tableData.filter(row => {
+                        const time = new Date(row.datetime).getHours();
+                        return time >= 8 && time <= 12;
+                    });
+                    
+                    renderData(tableData);
+                    renderCharts(chartData);
+                },
+                error: function(error) {
+                    console.error("Error loading CSV:", error);
+                    alert("Error loading data. Please check console for details.");
+                }
+            });
+        }
+
+        function processRow(row) {
+            const dateTime = new Date(row.Date);
+            const predTemp = parseFloat(row['Predicted Temperature']);
+            const actTemp = parseFloat(row['Actual Temperature']);
+            const predHumid = parseFloat(row['Predicted Humidity']);
+            const actHumid = parseFloat(row['Actual Humidity']);
+            
+            return {
+                datetime: dateTime,
+                displayTime: dateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                displayDate: dateTime.toLocaleDateString(),
+                predTemp: predTemp,
+                actTemp: actTemp,
+                tempDiff: (actTemp - predTemp).toFixed(1),
+                predHumid: predHumid,
+                actHumid: actHumid,
+                humidDiff: (actHumid - predHumid).toFixed(0)
+            };
+        }
+
+        // Render data to table
+        function renderData(data) {
+            const tableBody = document.getElementById('data-table');
+            tableBody.innerHTML = '';
+            
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50';
+                
+                const tempDiffColor = row.tempDiff > 0 ? 'text-red-600' : row.tempDiff < 0 ? 'text-blue-600' : 'text-gray-600';
+                const humidDiffColor = row.humidDiff > 0 ? 'text-red-600' : row.humidDiff < 0 ? 'text-blue-600' : 'text-gray-600';
+                
+                tr.innerHTML = `
+                    <td class="py-2 px-4">${row.displayDate} ${row.displayTime}</td>
+                    <td class="py-2 px-4">${row.predTemp.toFixed(1)}</td>
+                    <td class="py-2 px-4">${row.actTemp.toFixed(1)}</td>
+                    <td class="py-2 px-4 ${tempDiffColor}">${row.tempDiff > 0 ? '+' : ''}${row.tempDiff}</td>
+                    <td class="py-2 px-4">${row.predHumid.toFixed(0)}</td>
+                    <td class="py-2 px-4">${row.actHumid.toFixed(0)}</td>
+                    <td class="py-2 px-4 ${humidDiffColor}">${row.humidDiff > 0 ? '+' : ''}${row.humidDiff}</td>
+                `;
+                
+                tableBody.appendChild(tr);
+            });
+        }
+
+
+        function renderCharts(data) {
+            const labels = data.map(item => item.displayTime);
+            
+            // Temperature Chart
+            const tempChartCtx = document.getElementById('tempChart').getContext('2d');
+            new Chart(tempChartCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Predicted',
+                            data: data.map(item => item.predTemp),
+                            borderColor: '#3b82f6',
+                            borderWidth: 1.5,
+                            tension: 0.2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#3b82f6'
+                        },
+                        {
+                            label: 'Actual',
+                            data: data.map(item => item.actTemp),
+                            borderColor: '#ef4444',
+                            borderWidth: 1.5,
+                            borderDash: [3, 3],
+                            tension: 0.2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#ef4444'
+                        }
+                    ]
+                },
+                options: getChartOptions('Temperature (°C)')
+            });
+            
+            // Humidity Chart
+            const humidChartCtx = document.getElementById('humidChart').getContext('2d');
+            new Chart(humidChartCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Predicted',
+                            data: data.map(item => item.predHumid),
+                            borderColor: '#10b981', 
+                            borderWidth: 1.5,
+                            tension: 0.2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#10b981'
+                        },
+                        {
+                            label: 'Actual',
+                            data: data.map(item => item.actHumid),
+                            borderColor: '#f59e0b', 
+                            borderWidth: 1.5,
+                            borderDash: [3, 3],
+                            tension: 0.2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#f59e0b'
+                        }
+                    ]
+                },
+                options: getChartOptions('Humidity (%)')
+            });
+        }
+
+        function getChartOptions(title) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            boxWidth: 12,
+                            padding: 16,
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleFont: { size: 12 },
+                        bodyFont: { size: 12 },
+                        padding: 8
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: {
+                            drawBorder: false,
+                            color: 'rgba(0, 0, 0, 0.03)'
+                        },
+                        ticks: {
+                            font: { size: 10 }
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { size: 10 }
+                        }
+                    }
+                },
+                elements: {
+                    line: {
+                        fill: false
+                    }
+                }
+            };
+        }
+        document.addEventListener('DOMContentLoaded', loadCSVData);
+    </script>
+</body>
+</html>

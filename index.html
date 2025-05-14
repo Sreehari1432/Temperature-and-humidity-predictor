@@ -1,0 +1,383 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Prediction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        #charts-section {
+            display: none;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="container mx-auto p-4">
+
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex items-center space-x-2">
+                <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
+                <h1 class="text-xl font-semibold">Weather Prediction</h1>
+            </div>
+            <nav class="space-x-4">
+                <a href="index.html" class="text-blue-600 font-semibold">Dashboard</a>
+                <a href="analytics.html" class="text-gray-600 hover:text-gray-800">Analytics</a>
+                <a href="predictions.html" class="text-gray-600 hover:text-gray-800">Predictions</a>
+            </nav>
+        </div>
+
+        <div>
+            <div class="mb-4">
+                <span class="inline-block bg-blue-100 text-blue-600 text-sm font-medium px-3 py-1 rounded-full">Weather Station</span>
+            </div>
+            <h2 class="text-3xl font-bold mb-2">Temperature & Humidity Monitor</h2>
+            <p class="text-gray-600 mb-8">Real-time temperature and humidity monitoring with advanced prediction algorithms to forecast weather conditions for the next 3 days.</p>
+
+
+            <div class="grid grid-cols-1 gap-6 max-w-lg mx-auto">
+   
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="inline-block bg-gray-100 text-gray-600 text-sm font-medium px-3 py-1 rounded-full">Current Reading</span>
+                        <span id="datetime" class="text-gray-500 text-sm"></span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="text-center">
+                            <h3 class="text-gray-600">Temperature</h3>
+                            <p id="tempValue" class="text-3xl font-bold text-green-500">--°C</p>
+                        </div>
+                        <div class="text-center">
+                            <h3 class="text-gray-600">Humidity</h3>
+                            <p id="humidValue" class="text-3xl font-bold text-blue-500">--%</p>
+                        </div>
+                    </div>
+                </div>
+            
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="inline-block bg-gray-100 text-gray-600 text-sm font-medium px-3 py-1 rounded-full">Forecast</span>
+                    </div>
+                    <p class="text-gray-500 text-sm mb-4 text-center">Model trained with data from Feb 22 - Mar 13</p>
+                    <div class="flex justify-center mb-6">
+                        <div class="flex items-center space-x-4">
+                            <label for="datePicker" class="text-gray-600">Select Date:</label>
+                            <input type="date" id="datePicker" 
+                                   min="2025-02-23" 
+                                   max="2025-03-13"
+                                   class="p-2 border rounded-lg">
+                        </div>
+                    </div>
+                    <div class="flex justify-center pt-2">
+                        <button id="generateBtn" class="bg-blue-500 text-white px-6 py-3 rounded-full hover:bg-blue-600 transition-colors">
+                            Generate Forecast
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+
+            <div id="charts-section" class="mt-8">
+                <h3 class="text-xl font-semibold mb-4" id="chart-title">Forecast for <span id="selected-date"></span></h3>
+                
+                <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                    <h4 class="text-lg font-medium mb-4">Temperature Forecast (°C)</h4>
+                    <div class="chart-container">
+                        <canvas id="tempChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h4 class="text-lg font-medium mb-4">Humidity Forecast (%)</h4>
+                    <div class="chart-container">
+                        <canvas id="humidChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    
+        let weatherData = {};
+        let tempChart = null;
+        let humidChart = null;
+        
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set default date to first available date
+            document.getElementById('datePicker').value = '2025-02-23';
+            
+            // Load CSV data
+            loadCSVData();
+
+            document.getElementById('generateBtn').addEventListener('click', generateForecast);
+            
+            // Initialize real-time displays
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            fetchBlynkData();
+            setInterval(fetchBlynkData, 5000);
+        });
+
+        // Load and process CSV data
+        function loadCSVData() {
+            console.log("Loading CSV data...");
+            
+            Papa.parse("predicted_vs_actual.csv", {
+                download: true,
+                header: true,
+                complete: function(results) {
+                    console.log("CSV parsing complete", results);
+                    if (results.errors.length > 0) {
+                        console.error("CSV parsing errors:", results.errors);
+                    }
+                    
+                    // Process the raw CSV data
+                    processCSVData(results.data);
+                    console.log("Data processed successfully", weatherData);
+                    
+                    // Enable generate button
+                    document.getElementById('generateBtn').disabled = false;
+                },
+                error: function(error) {
+                    console.error("Error loading CSV:", error);
+                    alert("Error loading data file. Please check console for details.");
+         
+                    loadSampleData();
+                }
+            });
+        }
+
+        function processCSVData(csvData) {
+            weatherData = {};
+            
+            csvData.forEach(row => {
+                try {
+         
+                    let dateTime;
+                    if (row.Date.includes('/')) {
+                        // Handle DD/MM/YYYY format
+                        const parts = row.Date.split(' ');
+                        const dateParts = parts[0].split('/');
+                        dateTime = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${parts[1]}`);
+                    } else {
+              
+                        dateTime = new Date(row.Date);
+                    }
+                    
+ 
+                    if (isNaN(dateTime.getTime())) {
+                        console.warn("Invalid date format:", row.Date);
+                        return;
+                    }
+                    
+                    const dateStr = dateTime.toISOString().split('T')[0];
+                    const timeStr = dateTime.toTimeString().substring(0, 5);
+                    
+                    if (!weatherData[dateStr]) {
+                        weatherData[dateStr] = [];
+                    }
+                    
+                    weatherData[dateStr].push({
+                        time: timeStr,
+                        predTemp: parseFloat(row['Predicted Temperature']),
+                        actTemp: parseFloat(row['Actual Temperature']),
+                        predHumid: parseFloat(row['Predicted Humidity']),
+                        actHumid: parseFloat(row['Actual Humidity'])
+                    });
+                } catch (e) {
+                    console.error("Error processing row:", row, e);
+                }
+            });
+            
+            for (const date in weatherData) {
+                weatherData[date].sort((a, b) => a.time.localeCompare(b.time));
+            }
+        }
+
+        function generateForecast() {
+            const selectedDate = document.getElementById('datePicker').value;
+            const chartsSection = document.getElementById('charts-section');
+            
+            if (!weatherData[selectedDate] || weatherData[selectedDate].length === 0) {
+                alert('No forecast data available for the selected date');
+                chartsSection.style.display = 'none';
+                return;
+            }
+            
+         
+            const dateObj = new Date(selectedDate);
+            document.getElementById('selected-date').textContent = 
+                dateObj.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+            
+            chartsSection.style.display = 'block';
+            
+     
+            const filteredData = weatherData[selectedDate].filter((_, index) => index % 2 === 0);
+            
+            // Render charts
+            renderCharts(filteredData);
+        }
+
+       
+        function renderCharts(data) {
+            const labels = data.map(item => item.time);
+          
+            if (tempChart) {
+                tempChart.destroy();
+            }
+            if (humidChart) {
+                humidChart.destroy();
+            }
+            
+            // Temperature Chart
+            const tempChartCtx = document.getElementById('tempChart');
+            tempChart = new Chart(tempChartCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Predicted Temperature',
+                            data: data.map(item => item.predTemp),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'Actual Temperature',
+                            data: data.map(item => item.actTemp),
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: getChartOptions('Temperature (°C)')
+            });
+            
+            // Humidity Chart
+            const humidChartCtx = document.getElementById('humidChart');
+            humidChart = new Chart(humidChartCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Predicted Humidity',
+                            data: data.map(item => item.predHumid),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true
+                        },
+                        {
+                            label: 'Actual Humidity',
+                            data: data.map(item => item.actHumid),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.3,
+                            fill: true
+                        }
+                    ]
+                },
+                options: getChartOptions('Humidity (%)')
+            });
+        }
+
+        // Common chart options
+        function getChartOptions(title) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        },
+                        title: {
+                            display: true,
+                            text: title
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time of Day'
+                        }
+                    }
+                }
+            };
+        }
+
+        function updateDateTime() {
+            let now = new Date();
+            let formattedDateTime = now.getDate().toString().padStart(2, '0') + "-" + 
+                                    (now.getMonth() + 1).toString().padStart(2, '0') + "-" + 
+                                    now.getFullYear() + " " + 
+                                    now.getHours().toString().padStart(2, '0') + ":" + 
+                                    now.getMinutes().toString().padStart(2, '0') + ":" + 
+                                    now.getSeconds().toString().padStart(2, '0');
+            document.getElementById("datetime").textContent = formattedDateTime;
+        }
+
+        async function fetchBlynkData() {
+            const authToken = "kNcArC1Dd-WlXXyBbEl_YEvFihMWFxzq";
+            const temperatureUrl = `https://blynk.cloud/external/api/get?token=${authToken}&V0`;
+            const humidityUrl = `https://blynk.cloud/external/api/get?token=${authToken}&V1`;
+    
+            try {
+                const tempResponse = await fetch(temperatureUrl);
+                const humidityResponse = await fetch(humidityUrl);
+    
+                if (!tempResponse.ok || !humidityResponse.ok) {
+                    throw new Error("Failed to fetch data from Blynk");
+                }
+    
+                const temperature = await tempResponse.text();
+                const humidity = await humidityResponse.text();
+    
+                document.getElementById("tempValue").innerText = `${temperature}°C`;
+                document.getElementById("humidValue").innerText = `${humidity}%`;
+    
+            } catch (error) {
+                console.error("Error fetching Blynk data:", error);
+            }
+        }
+    </script>
+</body>
+</html>
